@@ -136,6 +136,16 @@ public:
 		}
 	}
 
+	std::vector<double> GetAllValues() {
+		std::vector<double> x;
+		for (int i = 0; i < (int)_model.size(); ++i) {
+			for (int k = 0; k < (int)_model[i].size(); ++k) {
+				x.push_back(_model[i][k]);
+			}
+		}
+		return x;
+	}
+
 	void AssignUrysohnDirect(const std::vector<double>& x) {
 		int nFeatures = (int)_model.size();
 		int n = (int)x.size() / nFeatures;
