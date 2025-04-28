@@ -32,6 +32,20 @@
 
 //Parameters for dataset and model: 
 
+////Features are 5 * 5 random matrices, targets are determinants.
+////Kaczmarz may take 5 to 20 minutes on laptop, but LBFGS will be running forever.
+//const int nTrainingRecords    = 10000000;
+//const int nValidationRecords  = 2000000;
+//const int nU1                 = 1;
+//const int nU0                 = 200;
+//const int nPoints0            = 5;
+//const int nPoints1            = 22;
+//const int nMatrixSize         = 5;
+//const double features_min     = 0.0;
+//const double features_max     = 1.0;
+//const double termination_rate = 0.90;
+//const double alpha            = 0.2;
+
 ////Features are 4 * 4 random matrices, targets are determinants.
 //const int nTrainingRecords    = 100000;
 //const int nValidationRecords  = 20000;
@@ -43,6 +57,7 @@
 //const double features_min     = 0.0;
 //const double features_max     = 1.0;
 //const double termination_rate = 0.980;
+//const double alpha            = 0.2;
 
 //Features are 3 * 3 random matrices, targets are determinants.
 const int nTrainingRecords    = 10000;
@@ -55,6 +70,7 @@ const int nMatrixSize         = 3;
 const double features_min     = 0.0;
 const double features_max     = 1.0;
 const double termination_rate = 0.980;
+const double alpha            = 0.05;
 
 ///////////// Determinat dataset
 std::unique_ptr<std::unique_ptr<double[]>[]> GenerateInput(int nRecords, int nFeatures, double min, double max) {
@@ -180,7 +196,7 @@ void GetGradientAndObjectiveFunction(const std::vector<std::unique_ptr<Urysohn>>
 
 		for (size_t j = 0; j < tmpIndexes.size(); ++j) {
 			int position = tmpIndexes[j];
-			g[position] += -2.0 * residual *  tmpDerivatives[j];
+			g[position] += -2.0 * residual * tmpDerivatives[j];
 		}
 	}
 }
@@ -311,14 +327,14 @@ void RunKaczmarz() {
 
 	std::vector<std::unique_ptr<Urysohn>> u0(nU0);
 	for (int i = 0; i < nU0; ++i) {
-		u0[i] = std::make_unique<Urysohn>(argmin, argmax, 0.0, 1.0, nPoints0);
+		u0[i] = std::make_unique<Urysohn>(argmin, argmax, targetMin / nU0, targetMax / nU0, nPoints0);
 	}
 
 	std::vector<double> argmin2;
 	std::vector<double> argmax2;
 	for (int i = 0; i < nU0; ++i) {
-		argmin2.push_back(0.0);
-		argmax2.push_back(1.0);
+		argmin2.push_back(targetMin / nU0);
+		argmax2.push_back(targetMax / nU0);
 	}
 
 	auto u1 = std::make_unique<Urysohn>(argmin2, argmax2, targetMin, targetMax, nPoints1);
@@ -327,6 +343,7 @@ void RunKaczmarz() {
 	auto intermediate = std::make_unique<double[]>(nU0);
 	auto derivatives = std::make_unique<double[]>(nU0);
 	
+	double mu = alpha / nU0;
 	printf("Newton - Kaczmarz method, features are random %d * %d matrices, targets are determinants\n", nMatrixSize, nMatrixSize);
 	for (int epoch = 0; epoch < 256; ++epoch) {
 		//training
@@ -337,9 +354,9 @@ void RunKaczmarz() {
 			double prediction = u1->GetUrysohn(intermediate, derivatives);
 			double residual = targets_training[i] - prediction;
 			for (int j = 0; j < nU0; ++j) {
-				u0[j]->Update(derivatives[j] * residual * 0.5, features_training[i]);
+				u0[j]->Update(derivatives[j] * residual * mu, features_training[i]);
 			}
-			u1->Update(residual * 0.005, intermediate);
+			u1->Update(residual * mu, intermediate);
 		}
 
 		//validation
@@ -444,11 +461,16 @@ void RunLBFGS() {
 	ObjectsHolder* objectsholder = new ObjectsHolder(nTrainingRecords, nValidationRecords, nMatrixSize, nU0, nU1, nPoints0,
 		nPoints1, features_min, features_max, termination_rate);
 
-	for (int i = 0; i < nU0 * nFeatures * nPoints0; ++i) {
-		x[i] = rand() % 100 / 1000.0;
+	int cnt = 0;
+	for (int i = 0; i < nU0; ++i) {
+		std::vector<double> v = objectsholder->_u0[i]->GetAllValues();
+		for (int k = 0; k < (int)v.size(); ++k) {
+			x[cnt++] = v[k];
+		}
 	}
-	for (int i = nU0 * nFeatures * nPoints0; i < N; ++i) {
-		x[i] = (rand() % 100 - 50) / 1000.0;
+	std::vector<double> z = objectsholder->_u1->GetAllValues();
+	for (int k = 0; k < (int)z.size(); ++k) {
+		x[cnt++] = z[k];
 	}
 
 	lbfgs_parameter_init(&param);
